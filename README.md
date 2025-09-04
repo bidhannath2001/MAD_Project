@@ -24,7 +24,7 @@ Mobile Application Development project named "ClassCentral" using Flutter
     </td>
     <td align="center">
       <img src="5.jpg" alt="Create new group" width="250"/>
-      <br><b>Create New group/b>
+      <br><b>Create New group</b>
     </td>
     <td align="center">
       <img src="6.jpg" alt="Drawer" width="250"/>

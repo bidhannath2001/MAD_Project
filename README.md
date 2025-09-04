@@ -1,6 +1,5 @@
 # MAD_Project
 Mobile Application Development project named "ClassCentral" using Flutter
-# MAD Project Screenshots
 ## App Screenshots
 
 <table>

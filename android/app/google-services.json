@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "872870500181",
+    "project_id": "classcentral-2c99c",
+    "storage_bucket": "classcentral-2c99c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:872870500181:android:f94945ff44c7e2f05481dc",
+        "android_client_info": {
+          "package_name": "com.example.classcentral"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDt7ShyArkOyLoN4yarfIt3kObuKjbhf4A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

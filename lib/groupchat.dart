@@ -1,7 +1,10 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:food_app/pages/home/group_details.dart';
+import 'package:flutter/services.dart';
+
+import 'features/home/data/group_chat_repository.dart';
+import 'pages/home/group_details.dart';
 
 class GroupChatScreen extends StatefulWidget {
   final String groupId;
@@ -16,58 +19,25 @@ class GroupChatScreen extends StatefulWidget {
 
 class _GroupChatScreenState extends State<GroupChatScreen> {
   final TextEditingController _messageController = TextEditingController();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final GroupChatRepository _repository = GroupChatRepository();
 
   // Send message method
   void _sendMessage() async {
     String message = _messageController.text.trim();
     if (message.isNotEmpty) {
-      User? user = FirebaseAuth.instance.currentUser; // Get the current user
-
-      if (user != null) {
-        // Add message to Firestore under the correct group ID
-        try {
-          await _firestore
-              .collection('groups')
-              .doc(widget.groupId) // Reference the specific group
-              .collection('messages')
-              .add({
-            'sender':
-                user.displayName ?? 'Anonymous', // Get the user's display name
-            'message': message,
-            'timestamp': FieldValue.serverTimestamp(),
-            'senderPhoto': user.photoURL, // Store the sender's photo URL
-          });
-          // Clear the text field after sending the message
-          _messageController.clear();
-        } catch (e) {
-          print("Error sending message: $e");
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Error sending message: $e")),
-          );
-        }
-      } else {
-        // Handle case where user is not logged in
-        print("No user is logged in");
+      try {
+        await _repository.sendMessage(widget.groupId, message);
+        _messageController.clear();
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error sending message: $e")),
+        );
       }
     }
   }
 
   void _addToGroup(String groupId) async {
     TextEditingController _memberController = TextEditingController();
-
-    // Check if the group document exists first
-    final groupDoc = await _firestore.collection('groups').doc(groupId).get();
-    if (!groupDoc.exists) {
-      // If the group does not exist, show an error
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Group does not exist')),
-      );
-      return;
-    }
-
-    // Get current group members to avoid duplicates
-    final currentMembers = List<String>.from(groupDoc.data()?['members'] ?? []);
 
     showDialog(
       context: context,
@@ -108,67 +78,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 String email = _memberController.text.trim();
                 if (email.isNotEmpty) {
                   try {
-                    // First check if user exists
-                    var userQuery = await _firestore
-                        .collection('users')
-                        .where('email', isEqualTo: email)
-                        .get();
-
-                    if (userQuery.docs.isNotEmpty) {
-                      var userDoc = userQuery.docs.first;
-                      String userId = userDoc.id;
-
-                      // Check if user is already in the group
-                      if (currentMembers.contains(userId)) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('User already in this group')),
-                        );
-                        return;
-                      }
-
-                      // Use Firestore transaction to add user to group
-                      await _firestore.runTransaction((transaction) async {
-                        DocumentSnapshot groupSnapshot = await transaction.get(
-                          _firestore.collection('groups').doc(groupId),
-                        );
-
-                        if (!groupSnapshot.exists) {
-                          throw Exception("Group does not exist");
-                        }
-
-                        // Add user to the group
-                        transaction.update(
-                          _firestore.collection('groups').doc(groupId),
-                          {
-                            'members': FieldValue.arrayUnion([userId]),
-                          },
-                        );
-
-                        // Add group to user's groups list
-                        transaction.update(
-                          _firestore.collection('users').doc(userId),
-                          {
-                            'groups': FieldValue.arrayUnion([groupId]),
-                          },
-                        );
-                      });
-
-                      // Success message and close dialog
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            content:
-                                Text('$email added to group successfully')),
-                      );
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            content: Text(
-                                'User not found. They must register first.')),
-                      );
-                    }
+                    await _repository.addMemberByEmail(groupId, email);
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                          content: Text('$email added to group successfully')),
+                    );
                   } catch (e) {
-                    print("Error adding member: $e");
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                           content:
@@ -185,62 +101,17 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   void _leaveGroup(String groupId) async {
-    User? user = FirebaseAuth.instance.currentUser;
-
-    if (user != null) {
-      try {
-        // Get the current group document
-        DocumentReference groupRef =
-            _firestore.collection('groups').doc(groupId);
-        DocumentSnapshot groupDoc = await groupRef.get();
-
-        // Ensure the group exists
-        if (groupDoc.exists) {
-          // Get the current list of members
-          List<dynamic> members = groupDoc['members'];
-
-          // Check if the user is part of the group
-          if (members.contains(user.uid)) {
-            // Remove the user from the group's members list
-            await groupRef.update({
-              'members': FieldValue.arrayRemove([user.uid]),
-            });
-
-            // Remove the group from the user's list of groups
-            await _firestore.collection('users').doc(user.uid).update({
-              'groups': FieldValue.arrayRemove([groupId]),
-            });
-
-            // Check if there are no members left in the group, delete the group
-            if (members.length == 1) {
-              await groupRef.delete();
-            }
-
-            // Show a success Snackbar
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('You have left the group "$groupId".')),
-            );
-
-            setState(() {});
-
-            // Optionally, navigate the user to another screen or reload the current screen
-            Navigator.of(context).pop(); // Close the group chat screen
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('You are not a member of this group.')),
-            );
-          }
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Group does not exist.')),
-          );
-        }
-      } catch (e) {
-        print("Error leaving group: $e");
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error leaving group: $e")),
-        );
-      }
+    try {
+      await _repository.leaveGroup(groupId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('You have left the group "$groupId".')),
+      );
+      Navigator.of(context).pop();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error leaving group: $e")),
+      );
     }
   }
 
@@ -313,7 +184,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         ],
       ),
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           image: DecorationImage(
             image: AssetImage('assets/R.jpeg'), // Specify the image path
             fit: BoxFit.cover, // This ensures the image covers the whole screen
@@ -324,17 +195,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             // Display the messages (Above the TextField)
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: _firestore
-                    .collection('groups')
-                    .doc(widget.groupId)
-                    .collection('messages')
-                    .orderBy('timestamp', descending: true)
-                    .snapshots(),
+                stream: _repository.messagesStream(widget.groupId),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
                     return Center(child: CircularProgressIndicator());
                   }
-
                   var messages = snapshot.data!.docs;
                   return ListView.builder(
                     reverse: true,
@@ -383,15 +248,44 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                                           fontWeight: FontWeight.bold)),
                                   SizedBox(height: 4),
                                   Container(
-                                    padding: EdgeInsets.all(10),
+                                    constraints: BoxConstraints(
+                                      maxWidth:
+                                          MediaQuery.of(context).size.width *
+                                              0.7,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 10),
+                                    margin:
+                                        const EdgeInsets.symmetric(vertical: 4),
                                     decoration: BoxDecoration(
                                       color: isCurrentUser
-                                          ? Colors.blue[200]
-                                          : Colors.grey[300],
-                                      borderRadius: BorderRadius.circular(8),
+                                          ? const Color(0xffDCF8C6)
+                                          : Colors.white,
+                                      borderRadius: BorderRadius.only(
+                                        topLeft: const Radius.circular(16),
+                                        topRight: const Radius.circular(16),
+                                        bottomLeft: isCurrentUser
+                                            ? const Radius.circular(16)
+                                            : const Radius.circular(4),
+                                        bottomRight: isCurrentUser
+                                            ? const Radius.circular(4)
+                                            : const Radius.circular(16),
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withAlpha(20),
+                                          blurRadius: 2,
+                                          offset: const Offset(0, 1),
+                                        ),
+                                      ],
                                     ),
-                                    child: Text(message,
-                                        style: TextStyle(fontSize: 16)),
+                                    child: SelectableText(
+                                      message,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
                                   ),
                                   SizedBox(height: 4),
                                   Text(time,

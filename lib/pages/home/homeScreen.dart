@@ -1,148 +1,211 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:flutter/material.dart';
-import 'package:food_app/auth/login.dart';
-import 'package:food_app/groupchat.dart';
-import 'package:food_app/pages/home/drawer_side.dart';
-// import 'package:food_app/pages/home/group_chat_screen.dart'; // Import the group chat screen
+import 'package:provider/provider.dart';
 
-class Homescreen extends StatefulWidget {
-  const Homescreen({super.key});
+import '../../core/widgets/app_app_bar.dart';
+import '../../core/widgets/app_empty_view.dart';
+import '../../core/widgets/app_error_view.dart';
+import '../../core/widgets/app_loading_indicator.dart';
+import '../../features/auth/providers/auth_provider.dart';
+import '../../features/home/data/group_chat_repository.dart';
+import '../../features/home/models/group.dart';
+import '../../features/home/providers/group_list_provider.dart';
+import '../../groupchat.dart';
+import 'drawer_side.dart';
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
 
   @override
-  State<Homescreen> createState() => _HomescreenState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomescreenState extends State<Homescreen> {
+class _HomeScreenState extends State<HomeScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  List<String> groups = []; // List to hold the group names
-
+  List<Group> groups = []; // List to hold the user groups
+  final GroupChatRepository _repository = GroupChatRepository();
   @override
   void initState() {
     super.initState();
-    _loadUserGroups();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<GroupListProvider>().loadGroups();
+    });
   }
 
   // Load user groups from Firestore
   Future<void> _loadUserGroups() async {
-    User? user = _auth.currentUser;
-    if (user != null) {
-      var userDoc = await _firestore.collection('users').doc(user.uid).get();
-      if (userDoc.exists) {
-        List<dynamic> groupIds = userDoc['groups'] ?? [];
-        List<String> groupNames = [];
-
-        // Fetch group names using the group IDs
-        for (var groupId in groupIds) {
-          var groupDoc =
-              await _firestore.collection('groups').doc(groupId).get();
-          if (groupDoc.exists) {
-            groupNames.add(groupDoc['groupName']);
-          }
-        }
-
-        setState(() {
-          groups = groupNames;
-        });
-      }
-    }
+    final provider = context.read<GroupListProvider>();
+    await provider.loadGroups();
+    setState(() {
+      groups = provider.groups;
+    });
   }
 
   void _createGroup() {
-    TextEditingController _groupNameController = TextEditingController();
-
+    final TextEditingController groupNameController = TextEditingController();
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text("Create New Group"),
-          content: TextField(
-            controller: _groupNameController,
-            decoration: InputDecoration(
-              labelText: 'Enter Group Name',
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: 70,
+                  width: 70,
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.groups_rounded,
+                    color: Colors.green,
+                    size: 36,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  "Create New Group",
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "Give your study group a meaningful name",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: groupNameController,
+                  autofocus: true,
+                  textInputAction: TextInputAction.done,
+                  decoration: InputDecoration(
+                    hintText: "Enter group name",
+                    prefixIcon: const Icon(Icons.edit_outlined),
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(
+                        color: Colors.green,
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                  onSubmitted: (_) async {
+                    final groupName = groupNameController.text.trim();
+                    if (groupName.isEmpty) return;
+                  },
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                        },
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          side: BorderSide(color: Colors.grey.shade400),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(fontSize: 16),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          final groupName = groupNameController.text.trim();
+
+                          if (groupName.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("Please enter a valid group name"),
+                              ),
+                            );
+                            return;
+                          }
+
+                          try {
+                            await context
+                                .read<GroupListProvider>()
+                                .createGroup(groupName);
+                            await _loadUserGroups();
+                            Navigator.of(context).pop();
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Group "$groupName" created successfully!',
+                                ),
+                              ),
+                            );
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text("Error creating group: $e"),
+                              ),
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.add, size: 20),
+                            SizedBox(width: 6),
+                            Text(
+                              'Create',
+                              style: TextStyle(fontSize: 16),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          actions: <Widget>[
-            TextButton(
-              child: Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            TextButton(
-              child: Text('Create'),
-              onPressed: () async {
-                String groupName = _groupNameController.text.trim();
-                if (groupName.isNotEmpty) {
-                  try {
-                    // Ensure the user document exists FIRST
-                    User? user = _auth.currentUser;
-                    if (user != null) {
-                      // Check if user exists in Firestore
-                      var userDoc = await _firestore
-                          .collection('users')
-                          .doc(user.uid)
-                          .get();
-                      if (!userDoc.exists) {
-                        // If user doesn't exist, create the user document
-                        await _firestore.collection('users').doc(user.uid).set({
-                          'email': user.email,
-                          'displayName': user.displayName,
-                          'groups': [],
-                          'createdAt': FieldValue.serverTimestamp(),
-                        });
-                      }
-
-                      // Create the group document with the group name as the document ID
-                      String groupId =
-                          groupName; // Use groupName as the document ID
-
-                      // Create the group document with the specified group name as the ID
-                      await _firestore.collection('groups').doc(groupId).set({
-                        'groupName': groupName,
-                        'description':
-                            'New group created by ${user.displayName}',
-                        'members': [
-                          user.uid
-                        ], // Add the current user as the first member
-                        'createdAt': FieldValue.serverTimestamp(),
-                      });
-
-                      // Add groupId to the user's groups list
-                      await _firestore
-                          .collection('users')
-                          .doc(user.uid)
-                          .update({
-                        'groups': FieldValue.arrayUnion([groupId]),
-                      });
-
-                      // Reload groups and close the dialog
-                      _loadUserGroups();
-                      Navigator.of(context).pop();
-
-                      // Show success Snackbar after group is created
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            content: Text(
-                                'Group "$groupName" created successfully!')),
-                      );
-                    }
-                  } catch (e) {
-                    print("Error creating group: $e");
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Error creating group: $e")),
-                    );
-                  }
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Please enter a valid group name")),
-                  );
-                }
-              },
-            ),
-          ],
         );
       },
     );
@@ -150,10 +213,7 @@ class _HomescreenState extends State<Homescreen> {
 
   // Logout method
   void _logout() async {
-    await _auth.signOut();
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (context) => LoginPage()),
-    );
+    await context.read<AuthProvider>().signOut();
   }
 
   // Navigate to the group chat screen
@@ -172,14 +232,14 @@ class _HomescreenState extends State<Homescreen> {
     User? user = _auth.currentUser;
 
     return Scaffold(
-      drawer: Drawer(
-        child: DrawerSlider(), // Custom drawer
+      drawer: const Drawer(
+        child: DrawerSlider(),
       ),
-      appBar: AppBar(
-        title: Text('Class Central'),
+      appBar: CustomAppBar(
+        titleText: 'Class Central',
         actions: [
           IconButton(
-            icon: Icon(Icons.exit_to_app),
+            icon:const  Icon(Icons.exit_to_app),
             onPressed: _logout, // Logout button
           ),
         ],
@@ -194,85 +254,115 @@ class _HomescreenState extends State<Homescreen> {
               radius: 50,
               backgroundImage: user?.photoURL != null
                   ? NetworkImage(user!.photoURL!)
-                  : AssetImage('assets/default_avatar.png') as ImageProvider,
+                  : const AssetImage('assets/default_avatar.png') as ImageProvider,
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             Text(
               'Welcome, ${user?.displayName ?? 'Guest'}!',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             Text(
               'Email: ${user?.email ?? 'Not Available'}',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+              style:const TextStyle(fontSize: 16, color: Colors.grey),
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
 
-            ElevatedButton(
-              onPressed: _createGroup,
-              child: const Text('Create a New Group'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[700],
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 24.0, vertical: 16.0),
-                textStyle: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                ),
-                elevation: 3,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-            SizedBox(height: 20),
-
-            // List of Groups
             Expanded(
-              child: ListView.builder(
-                itemCount: groups.length,
-                itemBuilder: (context, index) {
-                  return InkWell(
-                    onTap: () {
-                      String groupId = groups[
-                          index]; // In this case, group name is used as groupId
-                      _navigateToGroupChat(groupId, groups[index]);
-                    },
-                    child: Card(
-                      margin: EdgeInsets.symmetric(vertical: 8.0),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 5,
-                      child: ListTile(
-                        leading: Icon(
-                          Icons.group,
-                          color: Colors.green,
-                          size: 30,
-                        ),
-                        title: Text(
-                          groups[index],
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
+              child: Consumer<GroupListProvider>(
+                builder: (context, provider, _) {
+                  if (provider.isLoading && provider.groups.isEmpty) {
+                    return const AppLoadingIndicator(
+                      message: 'Loading your groups...',
+                    );
+                  }
+                  if (provider.error != null && provider.groups.isEmpty) {
+                    return AppErrorView(
+                      message: provider.error!,
+                      onRetry: () => provider.loadGroups(),
+                    );
+                  }
+                  if (provider.groups.isEmpty) {
+                    return const AppEmptyView(
+                      message: 'No groups yet. Create your first group!',
+                    );
+                  }
+                  final groups = provider.groups;
+                  return ListView.builder(
+                    itemCount: groups.length,
+                    itemBuilder: (context, index) {
+                      final group = groups[index];
+                      return InkWell(
+                        onTap: () {
+                          _navigateToGroupChat(group.id, group.name);
+                        },
+                        child: Card(
+                          shadowColor: Colors.greenAccent,
+                          elevation: 0.5,
+                          margin: const EdgeInsets.symmetric(vertical: 8.0),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: ListTile(
+                            leading: const Icon(
+                              Icons.group,
+                              color: Colors.green,
+                              size: 30,
+                            ),
+                            title: Text(
+                              group.name,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            subtitle: StreamBuilder<String?>(
+                              stream: _repository.getLastMessageStream(group.id),
+                              builder: (context, snapshot) {
+                                if (!snapshot.hasData) {
+                                  return const Text(
+                                    'No messages yet',
+                                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                                  );
+                                }
+
+                                return Text(
+                                  snapshot.data!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey,
+                                  ),
+                                );
+                              },
+                            ),
+                            trailing: Icon(
+                              Icons.arrow_forward_ios,
+                              size: 20,
+                              color: Colors.green,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
                           ),
                         ),
-                        // subtitle: Text("Tap to join or view the group"),
-                        trailing: Icon(
-                          Icons.arrow_forward_ios,
-                          size: 20,
-                          color: Colors.grey[600],
-                        ),
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      ),
-                    ),
+                      );
+                    },
                   );
                 },
               ),
-            )
+            ),
           ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _createGroup,
+        backgroundColor: Colors.green,
+        elevation: 4,
+        tooltip: 'Create Group',
+        child: const Icon(
+          Icons.group_add,
+          color: Colors.white,
         ),
       ),
     );

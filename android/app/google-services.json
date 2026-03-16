@@ -12,7 +12,20 @@
           "package_name": "com.example.classcentral"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "872870500181-512pkniacl6e6s5mhgudfb14uheo398n.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.classcentral",
+            "certificate_hash": "57f674997d63d1afd7d653c98b4860db1a35592a"
+          }
+        },
+        {
+          "client_id": "872870500181-49ofmjm2m0rmmt38iodsnb54rgblbgvv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDt7ShyArkOyLoN4yarfIt3kObuKjbhf4A"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "872870500181-49ofmjm2m0rmmt38iodsnb54rgblbgvv.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "872870500181-9eigrt9vj8fabssdjb81ooar5gugjppn.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.classcentral"
+              }
+            }
+          ]
         }
       }
     }
